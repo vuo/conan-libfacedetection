@@ -37,8 +37,13 @@ class LibfacedetectionConan(ConanFile):
             cmake.definitions['CMAKE_CXX_FLAGS'] += ' -stdlib=libc++ -I' + ' -I'.join(self.deps_cpp_info['llvm'].include_paths)
             cmake.definitions['CMAKE_OSX_ARCHITECTURES'] = 'x86_64'
             cmake.definitions['CMAKE_OSX_DEPLOYMENT_TARGET'] = '10.10'
+
             cmake.definitions['CMAKE_INSTALL_NAME_DIR'] = '@rpath'
             cmake.definitions['CMAKE_BUILD_WITH_INSTALL_NAME_DIR'] = 'ON'
+            # Workaround for Travis CI's cmake version prior to 3.9:
+            if platform.system() == 'Darwin':
+                cmake.definitions['CMAKE_SHARED_LINKER_FLAGS'] = '-Wl,-install_name,@rpath/libfacedetection.dylib'
+
             cmake.definitions['ENABLE_AVX2'] = 'ON'
 
             cmake.configure(source_dir='../%s' % self.source_dir,
