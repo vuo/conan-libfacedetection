@@ -14,7 +14,8 @@ class LibfacedetectonTestConan(ConanFile):
         self.copy('*', src='lib', dst='lib')
 
     def test(self):
-        self.run('./bin/test_package 2>&1 | fgrep -v "data is null."')
+        if platform.system() == 'Darwin':
+            self.run('./bin/test_package 2>&1 | fgrep -v "data is null."')
 
         # Ensure we only link to system libraries and our own libraries.
         if platform.system() == 'Darwin':
