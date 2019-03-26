@@ -11,3 +11,4 @@ set(CMAKE_OSX_SYSROOT /Applications/Xcode.app/Contents/Developer/Platforms/MacOS
 
 add_executable(test_package test_package.cc)
 target_link_libraries(test_package ${CONAN_LIBS})
+target_link_libraries(test_package facedetection)
