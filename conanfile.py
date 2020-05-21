@@ -5,8 +5,8 @@ class LibfacedetectionConan(ConanFile):
     name = 'libfacedetection'
 
     # libfacedetection has no tagged releases, so just use package_version.
-    source_version = '0'
-    package_version = '2'
+    source_version = '1'
+    package_version = '0'
     version = '%s-%s' % (source_version, package_version)
 
     build_requires = 'llvm/3.3-5@vuo/stable'
@@ -21,7 +21,7 @@ class LibfacedetectionConan(ConanFile):
     def source(self):
         self.run("git clone https://github.com/ShiqiYu/libfacedetection.git")
         with tools.chdir(self.source_dir):
-            self.run("git checkout b059dfa")
+            self.run("git checkout 1ed30e7")
 
         self.run('mv %s/LICENSE %s/%s.txt' % (self.source_dir, self.source_dir, self.name))
 
@@ -29,6 +29,7 @@ class LibfacedetectionConan(ConanFile):
         cmake = CMake(self)
 
         cmake.definitions['CMAKE_BUILD_TYPE'] = 'Release'
+        cmake.definitions['BUILD_SHARED_LIBS'] = 'ON'
         cmake.definitions['CMAKE_CXX_COMPILER'] = self.deps_cpp_info['llvm'].rootpath + '/bin/clang++'
         cmake.definitions['CMAKE_C_COMPILER']   = self.deps_cpp_info['llvm'].rootpath + '/bin/clang'
         cmake.definitions['CMAKE_C_FLAGS'] = cmake.definitions['CMAKE_CXX_FLAGS'] = '-Oz -DNDEBUG'
@@ -42,11 +43,10 @@ class LibfacedetectionConan(ConanFile):
         if platform.system() == 'Darwin':
             cmake.definitions['CMAKE_SHARED_LINKER_FLAGS'] = '-Wl,-install_name,@rpath/libfacedetection.dylib'
 
-        cmake.definitions['ENABLE_INT8'] = 'OFF'
-
         tools.mkdir(self.build_dir)
         with tools.chdir(self.build_dir):
             cmake.definitions['ENABLE_AVX2'] = 'OFF'
+            cmake.definitions['ENABLE_AVX512'] = 'OFF'
 
             cmake.configure(source_dir='../%s' % self.source_dir,
                             build_dir='.')
@@ -55,6 +55,7 @@ class LibfacedetectionConan(ConanFile):
         tools.mkdir(self.build_dir + '_avx2')
         with tools.chdir(self.build_dir + '_avx2'):
             cmake.definitions['ENABLE_AVX2'] = 'ON'
+            cmake.definitions['ENABLE_AVX512'] = 'OFF'
 
             cmake.configure(source_dir='../%s' % self.source_dir,
                             build_dir='.')
@@ -77,6 +78,7 @@ class LibfacedetectionConan(ConanFile):
             raise Exception('Unknown platform "%s"' % platform.system())
 
         self.copy('*.h', src='%s/src' % self.source_dir, dst='include')
+        self.copy('*.h', src=self.build_dir, dst='include')
         self.copy('libfacedetection.%s' % libext, src='%s' % self.build_dir, dst='lib')
         self.copy('libfacedetection_avx2.%s' % libext, src='%s_avx2' % self.build_dir, dst='lib')
 

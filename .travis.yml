@@ -1,13 +1,10 @@
+version: ~> 1.0
 matrix:
     include:
         - os: osx
           osx_image: xcode7.3
-          language: cpp
-          compiler:
-              - clang
         - os: linux
           dist: trusty
-          sudo: false
           language: python
           python: "3.6"
           addons:
@@ -17,13 +14,15 @@ matrix:
                       - libc++abi-dev
 
 before_install:
+    - export PATH=$PATH:/Library/Frameworks/Python.framework/Versions/3.7/bin
     - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-             brew update &> /dev/null
-          && travis_wait brew install --force-bottle conan
+          curl -OL https://www.python.org/ftp/python/3.7.6/python-3.7.6-macosx10.9.pkg
+          && sudo installer -pkg python-3.7.6-macosx10.9.pkg -target /
+          && pip3 install conan
           && conan config install https://vuo.org/sites/default/files/conan-macos.zip
       ; fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-             pip install conan
+          pip3 install conan
           && conan config install https://vuo.org/sites/default/files/conan-linux.zip
       ; fi
 
@@ -32,4 +31,4 @@ install:
 
 script:
     - conan create . vuo/stable
-      && conan upload --remote vuo --all --confirm libfacedetection/*
+      && conan upload --remote vuo --all --no-overwrite all --confirm libfacedetection/*
