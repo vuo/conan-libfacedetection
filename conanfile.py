@@ -1,21 +1,33 @@
 from conans import ConanFile, CMake, tools
+import os
 import platform
+import shutil
 
 class LibfacedetectionConan(ConanFile):
     name = 'libfacedetection'
 
     # libfacedetection has no tagged releases, so just use package_version.
     source_version = '1'
-    package_version = '0'
+    package_version = '1'
     version = '%s-%s' % (source_version, package_version)
 
-    build_requires = 'llvm/3.3-5@vuo/stable'
+    build_requires = (
+        'llvm/5.0.2-1@vuo/stable',
+        'macos-sdk/11.0-0@vuo/stable',
+    )
     settings = 'os', 'compiler', 'build_type', 'arch'
     url = 'https://github.com/ShiqiYu/libfacedetection'
     license = 'https://github.com/ShiqiYu/libfacedetection/blob/master/LICENSE'
     description = 'A library for face detection in images'
     source_dir = 'libfacedetection'
-    build_dir = '_build'
+
+    build_x86_dir = '_build_x86'
+    build_x86avx2_dir = '_build_x86avx2'
+    build_arm_dir = '_build_arm'
+    install_x86_dir = '_install_x86'
+    install_x86avx2_dir = '_install_x86avx2'
+    install_arm_dir = '_install_arm'
+
     generators = 'cmake'
 
     def source(self):
@@ -33,41 +45,48 @@ class LibfacedetectionConan(ConanFile):
         cmake.definitions['CMAKE_CXX_COMPILER'] = self.deps_cpp_info['llvm'].rootpath + '/bin/clang++'
         cmake.definitions['CMAKE_C_COMPILER']   = self.deps_cpp_info['llvm'].rootpath + '/bin/clang'
         cmake.definitions['CMAKE_C_FLAGS'] = cmake.definitions['CMAKE_CXX_FLAGS'] = '-Oz -DNDEBUG'
-        cmake.definitions['CMAKE_CXX_FLAGS'] += ' -stdlib=libc++ -I' + ' -I'.join(self.deps_cpp_info['llvm'].include_paths)
-        cmake.definitions['CMAKE_OSX_ARCHITECTURES'] = 'x86_64'
-        cmake.definitions['CMAKE_OSX_DEPLOYMENT_TARGET'] = '10.10'
+        cmake.definitions['CMAKE_CXX_FLAGS'] += ' -stdlib=libc++'
+        cmake.definitions['CMAKE_OSX_DEPLOYMENT_TARGET'] = '10.11'
+        cmake.definitions['CMAKE_OSX_SYSROOT'] = self.deps_cpp_info['macos-sdk'].rootpath
 
         cmake.definitions['CMAKE_INSTALL_NAME_DIR'] = '@rpath'
         cmake.definitions['CMAKE_BUILD_WITH_INSTALL_NAME_DIR'] = 'ON'
-        # Workaround for Travis CI's cmake version prior to 3.9:
-        if platform.system() == 'Darwin':
-            cmake.definitions['CMAKE_SHARED_LINKER_FLAGS'] = '-Wl,-install_name,@rpath/libfacedetection.dylib'
 
-        tools.mkdir(self.build_dir)
-        with tools.chdir(self.build_dir):
+        self.output.info("=== Build for x86_64 ===")
+        cmake.definitions['CMAKE_INSTALL_PREFIX'] = '%s/%s' % (os.getcwd(), self.install_x86_dir)
+        cmake.definitions['CMAKE_OSX_ARCHITECTURES'] = 'x86_64'
+        tools.mkdir(self.build_x86_dir)
+        with tools.chdir(self.build_x86_dir):
             cmake.definitions['ENABLE_AVX2'] = 'OFF'
             cmake.definitions['ENABLE_AVX512'] = 'OFF'
-
-            cmake.configure(source_dir='../%s' % self.source_dir,
-                            build_dir='.')
+            cmake.definitions['ENABLE_NEON'] = 'OFF'
+            cmake.configure(source_dir='../%s' % self.source_dir, build_dir='.')
             cmake.build()
+            cmake.install()
 
-        tools.mkdir(self.build_dir + '_avx2')
-        with tools.chdir(self.build_dir + '_avx2'):
+        self.output.info("=== Build for x86_64-avx2 ===")
+        cmake.definitions['CMAKE_INSTALL_PREFIX'] = '%s/%s' % (os.getcwd(), self.install_x86avx2_dir)
+        tools.mkdir(self.build_x86avx2_dir)
+        with tools.chdir(self.build_x86avx2_dir):
+            cmake.definitions['CMAKE_OSX_ARCHITECTURES'] = 'x86_64'
             cmake.definitions['ENABLE_AVX2'] = 'ON'
             cmake.definitions['ENABLE_AVX512'] = 'OFF'
-
-            cmake.configure(source_dir='../%s' % self.source_dir,
-                            build_dir='.')
+            cmake.definitions['ENABLE_NEON'] = 'OFF'
+            cmake.configure(source_dir='../%s' % self.source_dir, build_dir='.')
             cmake.build()
+            cmake.install()
 
-            if platform.system() == 'Darwin':
-                libext = 'dylib'
-            elif platform.system() == 'Linux':
-                libext = 'so'
-            else:
-                raise Exception('Unknown platform "%s"' % platform.system())
-            self.run('mv libfacedetection.%s libfacedetection_avx2.%s' % (libext, libext))
+        self.output.info("=== Build for arm64 ===")
+        cmake.definitions['CMAKE_INSTALL_PREFIX'] = '%s/%s' % (os.getcwd(), self.install_arm_dir)
+        tools.mkdir(self.build_arm_dir)
+        with tools.chdir(self.build_arm_dir):
+            cmake.definitions['CMAKE_OSX_ARCHITECTURES'] = 'arm64'
+            cmake.definitions['ENABLE_AVX2'] = 'OFF'
+            cmake.definitions['ENABLE_AVX512'] = 'OFF'
+            cmake.definitions['ENABLE_NEON'] = 'ON'
+            cmake.configure(source_dir='../%s' % self.source_dir, build_dir='.')
+            cmake.build()
+            cmake.install()
 
     def package(self):
         if platform.system() == 'Darwin':
@@ -77,10 +96,22 @@ class LibfacedetectionConan(ConanFile):
         else:
             raise Exception('Unknown platform "%s"' % platform.system())
 
-        self.copy('*.h', src='%s/src' % self.source_dir, dst='include')
-        self.copy('*.h', src=self.build_dir, dst='include')
-        self.copy('libfacedetection.%s' % libext, src='%s' % self.build_dir, dst='lib')
-        self.copy('libfacedetection_avx2.%s' % libext, src='%s_avx2' % self.build_dir, dst='lib')
+        self.copy('*.h', src='%s/include/facedetection' % self.install_x86_dir, dst='include')
+
+        with tools.chdir('%s/lib' % self.install_x86_dir):
+            shutil.move('libfacedetection.%s' % libext, 'libfacedetection_x86.%s' % libext)
+            self.run('install_name_tool -id @rpath/libfacedetection_x86.dylib libfacedetection_x86.dylib')
+        self.copy('libfacedetection_x86.%s' % libext, src='%s/lib' % self.install_x86_dir, dst='lib')
+
+        with tools.chdir('%s/lib' % self.install_x86avx2_dir):
+            shutil.move('libfacedetection.%s' % libext, 'libfacedetection_x86avx2.%s' % libext)
+            self.run('install_name_tool -id @rpath/libfacedetection_x86avx2.dylib libfacedetection_x86avx2.dylib')
+        self.copy('libfacedetection_x86avx2.%s' % libext, src='%s/lib' % self.install_x86avx2_dir, dst='lib')
+
+        with tools.chdir('%s/lib' % self.install_arm_dir):
+            shutil.move('libfacedetection.%s' % libext, 'libfacedetection_arm.%s' % libext)
+            self.run('install_name_tool -id @rpath/libfacedetection_arm.dylib libfacedetection_arm.dylib')
+        self.copy('libfacedetection_arm.%s' % libext, src='%s/lib' % self.install_arm_dir, dst='lib')
 
         self.copy('%s.txt' % self.name, src=self.source_dir, dst='license')
 
